@@ -23,28 +23,31 @@ conn.commit()
 # Create a Flask app
 app = Flask(__name__)
 
+# Create the bot application
+application = Application.builder().token(TOKEN).build()
+
 # Webhook endpoint to receive updates from Telegram
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(), bot)
+    update = Update.de_json(request.get_json(), application.bot)
     application.process_update(update)
     return 'OK'
 
 # Function to send news updates
 async def send_news(context: CallbackContext):
-    logging.info("Checking for stock news...")  
+    logging.info("Checking for stock news...")
     cursor.execute("SELECT * FROM users")
     users = cursor.fetchall()
 
     for user_id, stock_symbol in users:
-        logging.info(f"Fetching news for {stock_symbol}")  
+        logging.info(f"Fetching news for {stock_symbol}")
         news = get_stock_news(stock_symbol)
         if news:
             for article in news:
-                logging.info(f"Sending news for {stock_symbol}")  
+                logging.info(f"Sending news for {stock_symbol}")
                 await context.bot.send_message(chat_id=user_id, text=article)
         else:
-            logging.info(f"No news found for {stock_symbol}") 
+            logging.info(f"No news found for {stock_symbol}")
 
 # Start command
 async def start(update: Update, context: CallbackContext):
@@ -61,7 +64,7 @@ async def subscribe(update: Update, context: CallbackContext):
 
     cursor.execute("INSERT OR REPLACE INTO users (user_id, stock_symbol) VALUES (?, ?)", (user_id, stock_symbol))
     conn.commit()
-    
+
     await update.message.reply_text(f"Subscribed to news updates for {stock_symbol}")
 
 # Unsubscribe command
@@ -69,23 +72,20 @@ async def unsubscribe(update: Update, context: CallbackContext):
     user_id = update.message.chat_id
     cursor.execute("DELETE FROM users WHERE user_id=?", (user_id,))
     conn.commit()
-    
+
     await update.message.reply_text("Unsubscribed from stock news updates.")
 
-# Set up the Application
+# Add handlers to your bot
 def setup_bot():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("subscribe", subscribe))
-    app.add_handler(CommandHandler("unsubscribe", unsubscribe))
-
-    return app
-
-bot = setup_bot()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("subscribe", subscribe))
+    application.add_handler(CommandHandler("unsubscribe", unsubscribe))
 
 # Set the webhook URL for your bot
-bot.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
+application.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
 
 # Run the Flask app
 if __name__ == "__main__":
+    setup_bot()  # Ensure bot handlers are set up before running the Flask app
     app.run(host="0.0.0.0", port=5000)
+
