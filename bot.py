@@ -27,7 +27,7 @@ def init_db():
 init_db()
 
 # Synchronous function to send news updates
-def send_news(bot):
+async def send_news(context: CallbackContext):
     logging.info("Checking for stock news...")
     conn = sqlite3.connect("users.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -41,12 +41,14 @@ def send_news(bot):
             for article in news:
                 logging.info(f"Sending news for {stock_symbol}")
                 try:
-                    bot.send_message(chat_id=user_id, text=article)
+                    # Await the send_message call
+                    await context.bot.send_message(chat_id=user_id, text=article)
                 except Exception as e:
                     logging.error(f"Error sending message to {user_id}: {e}")
         else:
             logging.info(f"No news found for {stock_symbol}")
     conn.close()
+
 
 # Start command handler (remains async)
 async def start(update: Update, context: CallbackContext):
