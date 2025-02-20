@@ -16,22 +16,23 @@ logging.basicConfig(
 
 # Ensure database exists and is initialized
 def init_db():
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, stock_symbol TEXT)"
-        )
-        conn.commit()
+    conn = sqlite3.connect("users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, stock_symbol TEXT)"
+    )
+    conn.commit()
+    conn.close()
 
 init_db()
 
 # Synchronous function to send news updates
-def send_news(context: CallbackContext):
+def send_news(bot):
     logging.info("Checking for stock news...")
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users")
-        users = cursor.fetchall()
+    conn = sqlite3.connect("users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
 
     for user_id, stock_symbol in users:
         logging.info(f"Fetching news for {stock_symbol}")
@@ -40,11 +41,12 @@ def send_news(context: CallbackContext):
             for article in news:
                 logging.info(f"Sending news for {stock_symbol}")
                 try:
-                    context.bot.send_message(chat_id=user_id, text=article)
+                    bot.send_message(chat_id=user_id, text=article)
                 except Exception as e:
                     logging.error(f"Error sending message to {user_id}: {e}")
         else:
             logging.info(f"No news found for {stock_symbol}")
+    conn.close()
 
 # Start command handler (remains async)
 async def start(update: Update, context: CallbackContext):
@@ -58,20 +60,22 @@ async def subscribe(update: Update, context: CallbackContext):
         await update.message.reply_text("Usage: /subscribe <stock_symbol>")
         return
 
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO users (user_id, stock_symbol) VALUES (?, ?)", (user_id, stock_symbol))
-        conn.commit()
+    conn = sqlite3.connect("users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO users (user_id, stock_symbol) VALUES (?, ?)", (user_id, stock_symbol))
+    conn.commit()
+    conn.close()
 
     await update.message.reply_text(f"Subscribed to news updates for {stock_symbol}")
 
 # Unsubscribe command handler (remains async)
 async def unsubscribe(update: Update, context: CallbackContext):
     user_id = update.message.chat_id
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM users WHERE user_id=?", (user_id,))
-        conn.commit()
+    conn = sqlite3.connect("users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE user_id=?", (user_id,))
+    conn.commit()
+    conn.close()
 
     await update.message.reply_text("Unsubscribed from stock news updates.")
 
@@ -83,9 +87,9 @@ def main():
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
 
-    # Use APScheduler for job scheduling
+    # Schedule job to run every 1 minute (60 seconds), starting after 10 seconds
     scheduler = BackgroundScheduler()
-    scheduler.add_job(send_news, IntervalTrigger(minutes=1), id="send_stock_news")
+    scheduler.add_job(send_news, IntervalTrigger(minutes=1), id="send_stock_news", args=[app.bot])
     scheduler.start()
 
     logging.info("Bot is running using long polling...")
@@ -93,5 +97,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
