@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -49,7 +50,6 @@ async def send_news(context: CallbackContext):
             logging.info(f"No news found for {stock_symbol}")
     conn.close()
 
-
 # Start command handler (remains async)
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("Welcome! Use /subscribe <stock_symbol> to get news updates.")
@@ -81,6 +81,11 @@ async def unsubscribe(update: Update, context: CallbackContext):
 
     await update.message.reply_text("Unsubscribed from stock news updates.")
 
+# Function to run the async send_news function in the scheduler
+def run_async_send_news(app_bot):
+    # Run the async function in an event loop
+    asyncio.create_task(send_news(app_bot))
+
 # Main function to start the bot
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -89,9 +94,9 @@ def main():
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
 
-    # Schedule job to run every 1 minute (60 seconds), starting after 10 seconds
+    # Schedule job to run every 1 minute (60 seconds)
     scheduler = BackgroundScheduler()
-    scheduler.add_job(send_news, IntervalTrigger(minutes=1), id="send_stock_news", args=[app.bot])
+    scheduler.add_job(run_async_send_news, IntervalTrigger(minutes=1), id="send_stock_news", args=[app.bot])
     scheduler.start()
 
     logging.info("Bot is running using long polling...")
