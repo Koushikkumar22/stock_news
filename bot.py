@@ -4,9 +4,10 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from news_fetcher import get_stock_news
 
-# Hardcoded bot token (for this example)
+# Hardcoded bot token
 TOKEN = "8056446844:AAHwhKlo8-ZI4j8ESuAmAgpx4uSyyEErneM"
 
 # Set up logging
@@ -26,10 +27,9 @@ def init_db():
 
 init_db()
 
-# Function to send news updates (synchronous version for job queue)
+# Synchronous function to send news updates
 def send_news(context: CallbackContext):
     logging.info("Checking for stock news...")
-    # Create a new connection for thread safety
     conn = sqlite3.connect("users.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users")
@@ -41,16 +41,19 @@ def send_news(context: CallbackContext):
         if news:
             for article in news:
                 logging.info(f"Sending news for {stock_symbol}")
-                context.bot.send_message(chat_id=user_id, text=article)
+                try:
+                    context.bot.send_message(chat_id=user_id, text=article)
+                except Exception as e:
+                    logging.error(f"Error sending message to {user_id}: {e}")
         else:
             logging.info(f"No news found for {stock_symbol}")
     conn.close()
 
-# Start command handler
+# Start command handler (remains async)
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("Welcome! Use /subscribe <stock_symbol> to get news updates.")
 
-# Subscribe command handler
+# Subscribe command handler (remains async)
 async def subscribe(update: Update, context: CallbackContext):
     user_id = update.message.chat_id
     stock_symbol = " ".join(context.args).upper()
@@ -66,7 +69,7 @@ async def subscribe(update: Update, context: CallbackContext):
 
     await update.message.reply_text(f"Subscribed to news updates for {stock_symbol}")
 
-# Unsubscribe command handler
+# Unsubscribe command handler (remains async)
 async def unsubscribe(update: Update, context: CallbackContext):
     user_id = update.message.chat_id
     conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -77,12 +80,10 @@ async def unsubscribe(update: Update, context: CallbackContext):
 
     await update.message.reply_text("Unsubscribed from stock news updates.")
 
-# Main function
+# Main function to start the bot
 def main():
-    # Create the Application (bot instance)
     app = Application.builder().token(TOKEN).build()
 
-    # Add command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
